@@ -634,19 +634,11 @@ int SMTPFileSystem::open(const char *path, struct fuse_file_info *file_info)
     } else {
         tmp_path = m_tmp_files_pool.makeTmpPath(std_path);
 
-        // only copy the file if needed
-        if (!hasPartialObjectSupport()) {
-            int rval = m_device.filePull(std_path, tmp_path);
-            if (rval != 0)
-                return -rval;
-        } else {
-            int fd = ::creat(tmp_path.c_str(), S_IRUSR | S_IWUSR);
-            ::close(fd);
-        }
+        int rval = m_device.filePull(std_path, tmp_path);
+        if (rval != 0)
+            return -rval;
     }
 
-    // we create the tmp file even if we can use partial get/send to
-    // have a valid file descriptor
     int fd = ::open(tmp_path.c_str(), file_info->flags);
     if (fd < 0) {
         ::unlink(tmp_path.c_str());
@@ -666,38 +658,24 @@ int SMTPFileSystem::open(const char *path, struct fuse_file_info *file_info)
 int SMTPFileSystem::read(const char *path, char *buf, size_t size,
     off_t offset, struct fuse_file_info *file_info)
 {
-    int rval = 0;
-    if (hasPartialObjectSupport()) {
-        const std::string std_path(path);
-        rval = m_device.fileRead(std_path, buf, size, offset);
-    } else {
-        rval = ::pread(file_info->fh, buf, size, offset);
-        if (rval < 0)
-            return -errno;
-    }
-
+    int rval = ::pread(file_info->fh, buf, size, offset);
+    if (rval < 0)
+        return -errno;
     return rval;
 }
 
 int SMTPFileSystem::write(const char *path, const char *buf, size_t size,
     off_t offset, struct fuse_file_info *file_info)
 {
-    int rval = 0;
-    if (hasPartialObjectSupport()) {
-        const std::string std_path(path);
-        rval = m_device.fileWrite(std_path, buf, size, offset);
-    } else {
-        const TypeTmpFile *tmp_file = m_tmp_files_pool.getFile(std::string(path));
-        if (!tmp_file)
-            return -EINVAL;
+    const TypeTmpFile *tmp_file = m_tmp_files_pool.getFile(std::string(path));
+    if (!tmp_file)
+        return -EINVAL;
 
-        rval = ::pwrite(file_info->fh, buf, size, offset);
-        if (rval < 0)
-            return -errno;
+    int rval = ::pwrite(file_info->fh, buf, size, offset);
+    if (rval < 0)
+        return -errno;
 
-        const_cast<TypeTmpFile*>(tmp_file)->setModified();
-    }
-
+    const_cast<TypeTmpFile*>(tmp_file)->setModified();
     return rval;
 }
 
@@ -823,10 +801,4 @@ int SMTPFileSystem::ftruncate(const char *path, off_t offset,
         return -errno;
     const_cast<TypeTmpFile*>(tmp_file)->setModified();
     return 0;
-}
-
-bool SMTPFileSystem::hasPartialObjectSupport()
-{
-    MTPDevice::Capabilities caps = m_device.getCapabilities();
-    return (caps.canGetPartialObject() && caps.canSendPartialObject());
 }
