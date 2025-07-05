@@ -19,6 +19,7 @@ INSTALLATION
 
 Simple-mtpfs depends on fuse (version >= **2.7.3**) and libmtp. It also
 requires the C++ compiler to support **C++11** standard.
+Requires the package autoconf-archive as well.
 
 To install the driver, follow these steps:
 
